@@ -1,6 +1,9 @@
 getOrientation<-function(peaks,fimo, colname="FIMO", strongestMotif=TRUE, overlappingMotif=TRUE){
   
-  
+  if (!require("GenomicRanges")) {
+    library("GenomicRanges")
+  }
+
   if(!is.data.frame(fimo)){
     message('fimo file is not a data frame, trying to read it as a file')
     fimo<-read.table(fimo,header=TRUE,sep="\t", stringsAsFactors = F)
@@ -8,7 +11,10 @@ getOrientation<-function(peaks,fimo, colname="FIMO", strongestMotif=TRUE, overla
   
   if (!class(peaks) == "GRanges"){
     message('peaks file is not a GRanges object, trying to read it as a narrowPeak file')
-    peaks<- import(peaks, format = "narrowPeak")
+    if (!require("rtracklayer")) {
+      library("rtracklayer")
+    }
+    peaks<- rtracklayer::import(peaks, format = "narrowPeak")
   }
   
   #FIMO sequence name should match peak name
