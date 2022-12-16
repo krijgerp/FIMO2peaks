@@ -1,8 +1,26 @@
-getOrientation<-function(peaks,fimo, colname="FIMO_default", strongestMotif=TRUE, overlappingMotif=TRUE){
-
+getOrientation<-function(peaks,fimo, colname="FIMO", strongestMotif=TRUE, overlappingMotif=TRUE){
+  
+  
+  if(!is.data.frame(fimo)){
+    message('fimo file is not a data frame, trying to read it as a file')
+    fimo<-read.table(fimo,header=TRUE,sep="\t", stringsAsFactors = F)
+  }
+  
+  if (!class(peaks) == "GRanges"){
+    message('peaks file is not a GRanges object, trying to read it as a narrowPeak file')
+    peaks<- import(peaks, format = "narrowPeak")
+  }
+  
+  #FIMO sequence name should match peak name
+  if(any(!fimo$sequence_name %in% peaks$name)){
+    message('ERROR: fimo file contains sequence names that are not in peaks file')
+    return(NULL)
+  }
+  
+  
   #check for duplicates in peaks
   if(any(duplicated(peaks$name))){
-    message('peaks file contains duplicate peak names, using only the first of these')
+    message('peaks file contains duplicate sequence names, using only the first of these')
     peaks<-peaks[!duplicated(peaks$name),]
   }
   
