@@ -1,0 +1,162 @@
+#This wrapper calls CTCF motifs under CTCF peaks using FIMO with default thresh pval (1e-4 ).
+
+
+#To install fimo:
+#conda  create -n ChIPseq -c bioconda meme
+
+#MA0139.1 CTCF motif
+#https://jaspar.genereg.net/matrix/MA0139.1/
+#https://jaspar.genereg.net/api/v1/matrix/MA0139.1.meme
+
+
+
+
+#Load packages
+require(BSgenome.Hsapiens.UCSC.hg38)
+require(rtracklayer)
+
+# functions ---------------------------------------------------------------
+
+getOrientation<-function(peaks,fimo, colname="FIMO", strongestMotif=TRUE, overlappingMotif=TRUE){
+  
+  if (!require("GenomicRanges")) {
+    library("GenomicRanges")
+  }
+  
+  if(!is.data.frame(fimo)){
+    message('fimo file is not a data frame, trying to read it as a file')
+    fimo<-read.table(fimo,header=TRUE,sep="\t", stringsAsFactors = F)
+  }
+  
+  if (!class(peaks) == "GRanges"){
+    message('peaks file is not a GRanges object, trying to read it as a narrowPeak file')
+    if (!require("rtracklayer")) {
+      library("rtracklayer")
+    }
+    peaks<- rtracklayer::import(peaks, format = "narrowPeak")
+  }
+  
+  #FIMO sequence name should match peak name
+  if(any(!fimo$sequence_name %in% peaks$name)){
+    message('ERROR: fimo file contains sequence names that are not in peaks file')
+    return(NULL)
+  }
+  
+  
+  #check for duplicates in peaks
+  if(any(duplicated(peaks$name))){
+    message('peaks file contains duplicate sequence names, using only the first of these')
+    peaks<-peaks[!duplicated(peaks$name),]
+  }
+  
+  if(strongestMotif){
+    #strongest motif
+    fimo_strong<-fimo[order(fimo$score,decreasing=TRUE),]
+    fimo_strong<-fimo_strong[!duplicated(fimo_strong$sequence_name),]
+    rownames(fimo_strong)<-as.character(fimo_strong$sequence_name)
+    mcols(peaks)[paste0(colname,'_strongest')]<-fimo_strong[as.character(peaks$name),'strand']
+  }
+  
+  if(overlappingMotif){
+    #count overlapping motifs and keep unique motif
+    freq.table<-as.data.frame.matrix(table(fimo$sequence_name, fimo$strand))
+    colnames(freq.table)<-c("reverse","forward")
+    freq.table$strand<-"*"
+    freq.table$strand[ which( freq.table$forward > 0 & freq.table$reverse == 0)] <- "+"
+    freq.table$strand[ which( freq.table$forward == 0 & freq.table$reverse > 0)] <- "-"
+    freq.table$strand[ which( freq.table$forward > 0 & freq.table$reverse > 0)]  <- "both"
+    message('Add strand information back to peak file')
+    mcols(peaks)[colname]<-freq.table[as.character(peaks$name),'strand'] 
+  }
+  
+  return(peaks)
+}
+addCTCFmotif<-function(peakF, FIMO, motif){
+  
+  files<-list.files(path = peakF, pattern = '.bed.gz', full.names = TRUE)
+  
+  for(file_path in files){
+    
+    message(basename(file_path))
+    
+    file_path <- file_path
+    last_word <- gsub("\\..*", "", basename(file_path))
+    last_word_split <- strsplit(last_word, "_")[[1]]
+    experiment_ID <- last_word_split[length(last_word_split)]
+    
+    
+    peaks<-import(file_path, format = "narrowPeak")
+    peaks$name<-paste(experiment_ID,1:length(peaks), sep = '_')
+    seq<-getSeq(x = BSgenome.Hsapiens.UCSC.hg38, names = peaks)
+    names(seq)<-peaks$name
+    
+    
+    outF<-file.path(peakF,experiment_ID)
+    outF.FIMO<-file.path(outF,"FIMO")
+    outfile<-gsub(pattern = '.bed.gz', replacement = '.fa', x = basename(file_path))
+    outfile<-file.path(outF,outfile)
+    outPeakfile<-gsub(pattern = '.bed.gz', replacement = '_withMotif.rds', x = basename(file_path))
+    outPeakfile<-file.path(outF,outPeakfile)
+    outFIMOfile<-file.path(outF.FIMO,"fimo.tsv")
+    
+    
+    if (!dir.exists(outF)) {
+      dir.create(outF)
+    }
+    
+    
+    if (file.exists(outfile)) {
+      message("WARNING: fasta file already exists, continue with existing one.")
+      
+    }else{
+      writeXStringSet(seq,outfile,compress =FALSE)
+    }
+    
+    
+    
+    if (file.exists(outFIMOfile)) {
+      message("WARNING: FIMO file already exists, , continue with existing one.")
+      
+    }else{
+      message("Run FIMO")
+      CMD<-paste(
+        FIMO,
+        "-max-stored-scores 50000000",
+        paste("--o",outF.FIMO),
+        motif,
+        outfile
+      )
+      system(CMD)
+      
+    }
+    
+    
+    
+    if (file.exists(outPeakfile)) {
+      message("ERROR: peak file already exists, file not overwritten.")
+      
+    }else{
+      peaks<-getOrientation(peaks,fimo=outFIMOfile, colname="FIMO", strongestMotif=TRUE, overlappingMotif=TRUE)
+      saveRDS(object = peaks, file = outPeakfile)
+    }
+    
+  }
+  
+  
+  
+  
+  
+}
+
+# settings ----------------------------------------------------------------
+
+addCTCFmotif(peakF='/home/p.krijger_cbs-niob.local/bulk/ChIPseq/K562/CTCF/',
+             FIMO="/home/p.krijger_cbs-niob.local/.conda/envs/ChIPseq/bin/fimo",
+             motif="/home/p.krijger_cbs-niob.local/bulk/annotations/motif/MA0139.1.meme")
+  
+
+
+
+
+
+
