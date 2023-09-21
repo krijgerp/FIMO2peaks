@@ -16,6 +16,9 @@ plotCTCFmotif <- function(peaks, zoom, y1 = -5, y2 = -10, strandCol = "FIMO", Mb
   if(Mb){
     Xdiv<-1e6
   }
+else{
+  Xdiv<-1
+}
   
   MOI <- subsetByOverlaps(peaks, zoom)
   MOI_withMotif<-MOI[as.vector(!is.na(mcols(MOI)[paste0(strandCol)]))]
